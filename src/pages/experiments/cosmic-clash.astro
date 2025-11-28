@@ -275,7 +275,7 @@ function showWeaponSelect() {
 function selectWeapon(weapon: Weapon) {
   selectedWeapon = weapon;
   aimingMode = true;
-  instructions.textContent = 'Click on canvas to aim and fire!';
+  instructions.textContent = 'Aim with mouse - farther = more power! Click to fire!';
 
   // Highlight selected weapon
   Array.from(weaponButtons.children).forEach((btn, i) => {
@@ -749,6 +749,45 @@ function drawAimLine() {
   const dy = mouseY - activeChar.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
 
+  // Calculate power based on distance (capped at 200 pixels for max power)
+  const maxDist = 200;
+  const power = Math.min(dist / maxDist, 1.5);
+  const powerPercent = Math.min(power * 100, 150);
+
+  // Calculate initial velocity
+  const powerMultiplier = 0.15;
+  const vx = dx * powerMultiplier;
+  const vy = dy * powerMultiplier;
+
+  // Draw trajectory arc
+  ctx.strokeStyle = selectedWeapon.color + '80';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(activeChar.x, activeChar.y);
+
+  // Simulate trajectory
+  let simX = activeChar.x;
+  let simY = activeChar.y;
+  let simVx = vx;
+  let simVy = vy;
+
+  for (let i = 0; i < 100; i++) {
+    simVy += GRAVITY;
+    simX += simVx;
+    simY += simVy;
+
+    ctx.lineTo(simX, simY);
+
+    // Stop if hit ground or off screen
+    if (simY >= GROUND_Y || simX < 0 || simX > canvas.width) {
+      break;
+    }
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw aim line from character to mouse
   ctx.strokeStyle = selectedWeapon.color;
   ctx.lineWidth = 2;
   ctx.setLineDash([10, 5]);
@@ -758,7 +797,32 @@ function drawAimLine() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Crosshair
+  // Power meter (circle around character)
+  const meterRadius = 35;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(activeChar.x, activeChar.y, meterRadius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Power fill
+  const powerAngle = (power * Math.PI * 2);
+  ctx.strokeStyle = power > 1 ? '#ff0000' : power > 0.7 ? '#ffff00' : '#00ff00';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(activeChar.x, activeChar.y, meterRadius, -Math.PI / 2, -Math.PI / 2 + powerAngle);
+  ctx.stroke();
+
+  // Power percentage text
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.shadowColor = '#000000';
+  ctx.shadowBlur = 4;
+  ctx.fillText(`${Math.round(powerPercent)}%`, activeChar.x, activeChar.y - meterRadius - 10);
+  ctx.shadowBlur = 0;
+
+  // Crosshair at mouse
   ctx.strokeStyle = selectedWeapon.color;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -884,11 +948,11 @@ canvas.addEventListener('click', (e) => {
 
   const dx = clickX - activeChar.x;
   const dy = clickY - activeChar.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
 
-  const speed = selectedWeapon.speed;
-  const vx = (dx / dist) * speed;
-  const vy = (dy / dist) * speed;
+  // Power based on distance from character to click point
+  const powerMultiplier = 0.15;
+  const vx = dx * powerMultiplier;
+  const vy = dy * powerMultiplier;
 
   projectiles.push({
     x: activeChar.x,
@@ -916,13 +980,14 @@ function aiAttack(weapon: Weapon) {
 
   const target = playerChars[Math.floor(Math.random() * playerChars.length)];
 
-  const dx = target.x - activeChar.x + (Math.random() - 0.5) * 100; // Some inaccuracy
-  const dy = target.y - activeChar.y + (Math.random() - 0.5) * 50;
-  const dist = Math.sqrt(dx * dx + dy * dy);
+  // AI aims with some inaccuracy
+  const dx = target.x - activeChar.x + (Math.random() - 0.5) * 80;
+  const dy = target.y - activeChar.y + (Math.random() - 0.5) * 60;
 
-  const speed = weapon.speed;
-  const vx = (dx / dist) * speed;
-  const vy = (dy / dist) * speed;
+  // Power based on distance (same as player)
+  const powerMultiplier = 0.15;
+  const vx = dx * powerMultiplier;
+  const vy = dy * powerMultiplier;
 
   projectiles.push({
     x: activeChar.x,
