@@ -9,12 +9,40 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
       <a href="/experiments" class="text-sm text-[#4B5563] hover:text-[#2A3D56]">← Back to Experiments</a>
     </div>
     <p class="text-sm md:text-base text-[#4B5563] max-w-2xl">
-      A minimal turn-based physics game featuring three cosmic character types: Plasmids, Neonoids, and Voidlings.
+      Choose your team and battle on an alien desert planet! Each character has unique personalities and abilities.
     </p>
 
     <div class="flex flex-col items-center space-y-4 mt-6">
-      <canvas id="gameCanvas" width="900" height="500" class="border-2 border-[#2A3D56] rounded-lg shadow-lg"></canvas>
-      <div id="gameInfo" class="text-sm text-[#4B5563] text-center">
+      <!-- Team Selection Screen -->
+      <div id="teamSelect" class="bg-white p-6 rounded-lg shadow-lg border-2 border-[#2A3D56]">
+        <h2 class="text-lg font-semibold text-[#2A3D56] mb-4 text-center">Choose Your Team</h2>
+        <div class="flex gap-4 justify-center">
+          <button id="selectPlasmid" class="team-btn p-4 border-2 border-[#00ffaa] rounded-lg hover:bg-[#00ffaa] hover:bg-opacity-10 transition-all">
+            <div class="text-center">
+              <div class="text-3xl mb-2">💧</div>
+              <div class="font-semibold text-[#00ffaa]">PLASMIDS</div>
+              <div class="text-xs text-gray-600">Bouncy & Cheerful</div>
+            </div>
+          </button>
+          <button id="selectNeonoid" class="team-btn p-4 border-2 border-[#00ffff] rounded-lg hover:bg-[#00ffff] hover:bg-opacity-10 transition-all">
+            <div class="text-center">
+              <div class="text-3xl mb-2">📦</div>
+              <div class="font-semibold text-[#00ffff]">NEONOIDS</div>
+              <div class="text-xs text-gray-600">Angular & Focused</div>
+            </div>
+          </button>
+          <button id="selectVoidling" class="team-btn p-4 border-2 border-[#6a0dad] rounded-lg hover:bg-[#6a0dad] hover:bg-opacity-10 transition-all">
+            <div class="text-center">
+              <div class="text-3xl mb-2">👻</div>
+              <div class="font-semibold text-[#6a0dad]">VOIDLINGS</div>
+              <div class="text-xs text-gray-600">Mysterious & Spooky</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <canvas id="gameCanvas" width="900" height="500" class="border-2 border-[#2A3D56] rounded-lg shadow-lg" style="display:none;"></canvas>
+      <div id="gameInfo" class="text-sm text-[#4B5563] text-center" style="display:none;">
         <p>Click on the canvas to launch your active character!</p>
         <p id="turnInfo" class="font-semibold mt-2"></p>
       </div>
@@ -27,10 +55,12 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const turnInfo = document.getElementById('turnInfo')!;
+const teamSelect = document.getElementById('teamSelect')!;
+const gameInfo = document.getElementById('gameInfo')!;
 
 // Constants
 const GRAVITY = 0.3;
-const GROUND_Y = 450;
+const GROUND_Y = 420;
 const LAUNCH_POWER = 0.15;
 
 // Character Types
@@ -46,53 +76,80 @@ interface Character {
   team: number;
   radius: number;
   active: boolean;
+  expression: 'happy' | 'focused' | 'angry' | 'hurt';
+}
+
+interface Plant {
+  x: number;
+  y: number;
+  type: 'spike' | 'mushroom' | 'crystal';
+  height: number;
+}
+
+interface Rock {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 // Game State
 let characters: Character[] = [];
 let currentTeam = 0;
-let currentCharIndex = 0;
-let stars: { x: number; y: number; size: number }[] = [];
+let plants: Plant[] = [];
+let rocks: Rock[] = [];
+let playerTeamType: CharacterType;
+let enemyTeamType: CharacterType;
+let gameStarted = false;
 
-// Initialize stars for background
-function initStars() {
-  for (let i = 0; i < 100; i++) {
-    stars.push({
+// Environment setup
+function initEnvironment() {
+  // Add alien plants
+  for (let i = 0; i < 8; i++) {
+    plants.push({
       x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      size: Math.random() * 2
+      y: GROUND_Y,
+      type: ['spike', 'mushroom', 'crystal'][Math.floor(Math.random() * 3)] as any,
+      height: 20 + Math.random() * 30
+    });
+  }
+
+  // Add rocks
+  for (let i = 0; i < 6; i++) {
+    rocks.push({
+      x: Math.random() * canvas.width,
+      y: GROUND_Y - Math.random() * 20,
+      width: 30 + Math.random() * 40,
+      height: 20 + Math.random() * 30
     });
   }
 }
 
 // Character Factories
-function createPlasmid(x: number, y: number, team: number): Character {
+function createCharacter(type: CharacterType, x: number, y: number, team: number): Character {
   return {
-    x, y, vx: 0, vy: 0, hp: 100, type: 'plasmid', team, radius: 25, active: false
+    x, y, vx: 0, vy: 0, hp: 100, type, team,
+    radius: type === 'plasmid' ? 25 : type === 'neonoid' ? 20 : 22,
+    active: false,
+    expression: 'happy'
   };
 }
 
-function createNeonoid(x: number, y: number, team: number): Character {
-  return {
-    x, y, vx: 0, vy: 0, hp: 100, type: 'neonoid', team, radius: 20, active: false
-  };
-}
+// Initialize Game with selected teams
+function initGame(playerType: CharacterType, enemyType: CharacterType) {
+  characters = [];
 
-function createVoidling(x: number, y: number, team: number): Character {
-  return {
-    x, y, vx: 0, vy: 0, hp: 100, type: 'voidling', team, radius: 22, active: false
-  };
-}
+  // Player team (left side)
+  const playerX1 = 100 + Math.random() * 100;
+  const playerX2 = 150 + Math.random() * 100;
+  characters.push(createCharacter(playerType, playerX1, 200, 0));
+  characters.push(createCharacter(playerType, playerX2, 250, 0));
 
-// Initialize Game
-function initGame() {
-  // Team 0
-  characters.push(createPlasmid(150, 300, 0));
-  characters.push(createNeonoid(250, 300, 0));
-
-  // Team 1
-  characters.push(createVoidling(650, 300, 1));
-  characters.push(createPlasmid(750, 300, 1));
+  // Enemy team (right side)
+  const enemyX1 = 600 + Math.random() * 100;
+  const enemyX2 = 650 + Math.random() * 100;
+  characters.push(createCharacter(enemyType, enemyX1, 200, 1));
+  characters.push(createCharacter(enemyType, enemyX2, 250, 1));
 
   characters[0].active = true;
   updateTurnInfo();
@@ -102,101 +159,374 @@ function initGame() {
 function updateTurnInfo() {
   const activeChar = characters.find(c => c.active);
   if (activeChar) {
-    turnInfo.textContent = `Team ${activeChar.team + 1}'s turn - ${activeChar.type.toUpperCase()}`;
+    const teamName = activeChar.team === 0 ? 'Your' : 'Enemy';
+    turnInfo.textContent = `${teamName} turn - ${activeChar.type.toUpperCase()}`;
   }
 }
 
 // Drawing Functions
 function drawBackground() {
-  // Dark space gradient
+  // Alien sky gradient (pinkish/purple)
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, '#0a0e27');
-  gradient.addColorStop(1, '#1a1a3e');
+  gradient.addColorStop(0, '#ff6b9d');
+  gradient.addColorStop(0.5, '#c44569');
+  gradient.addColorStop(1, '#8b6b8b');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw stars
-  ctx.fillStyle = '#ffffff';
-  stars.forEach(star => {
-    ctx.globalAlpha = 0.5 + Math.random() * 0.5;
-    ctx.fillRect(star.x, star.y, star.size, star.size);
-  });
-  ctx.globalAlpha = 1;
+  // Distant alien suns/moons
+  ctx.fillStyle = '#ffe5b4';
+  ctx.shadowColor = '#ffe5b4';
+  ctx.shadowBlur = 30;
+  ctx.beginPath();
+  ctx.arc(150, 80, 40, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#b4e5ff';
+  ctx.shadowColor = '#b4e5ff';
+  ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.arc(750, 100, 25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
 }
 
 function drawGround() {
-  ctx.strokeStyle = '#4a5568';
-  ctx.lineWidth = 3;
+  // Desert sand with texture
+  ctx.fillStyle = '#d4a574';
+  ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+
+  // Sand texture
+  ctx.fillStyle = '#c49563';
+  for (let i = 0; i < 50; i++) {
+    const x = Math.random() * canvas.width;
+    const y = GROUND_Y + Math.random() * 80;
+    ctx.fillRect(x, y, 2, 1);
+  }
+
+  // Ground line
+  ctx.strokeStyle = '#8b6f47';
+  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, GROUND_Y);
   ctx.lineTo(canvas.width, GROUND_Y);
   ctx.stroke();
 }
 
+function drawPlants() {
+  plants.forEach(plant => {
+    ctx.save();
+    ctx.translate(plant.x, plant.y);
+
+    if (plant.type === 'spike') {
+      // Spiky alien plant
+      ctx.fillStyle = '#4a7c59';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-5, -plant.height);
+      ctx.lineTo(5, -plant.height);
+      ctx.closePath();
+      ctx.fill();
+
+      // Spikes
+      ctx.strokeStyle = '#2d5a3d';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const y = -(plant.height * (i / 3));
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(-8, y - 5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(8, y - 5);
+        ctx.stroke();
+      }
+    } else if (plant.type === 'mushroom') {
+      // Alien mushroom
+      ctx.fillStyle = '#7c4a6f';
+      ctx.beginPath();
+      ctx.arc(0, -plant.height, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#9d6b8f';
+      ctx.fillRect(-3, -plant.height, 6, plant.height);
+
+      // Spots
+      ctx.fillStyle = '#ff6b9d';
+      ctx.beginPath();
+      ctx.arc(-5, -plant.height - 2, 2, 0, Math.PI * 2);
+      ctx.arc(5, -plant.height + 1, 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Crystal
+      ctx.fillStyle = '#4ab8ff';
+      ctx.shadowColor = '#4ab8ff';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-6, -plant.height);
+      ctx.lineTo(0, -plant.height - 10);
+      ctx.lineTo(6, -plant.height);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.restore();
+  });
+}
+
+function drawRocks() {
+  rocks.forEach(rock => {
+    ctx.fillStyle = '#6b5b4f';
+    ctx.fillRect(rock.x, rock.y - rock.height, rock.width, rock.height);
+
+    // Highlight
+    ctx.fillStyle = '#8b7b6f';
+    ctx.fillRect(rock.x, rock.y - rock.height, rock.width / 3, rock.height / 3);
+
+    // Shadow
+    ctx.fillStyle = '#4b3b2f';
+    ctx.fillRect(rock.x + rock.width * 0.7, rock.y - rock.height * 0.3, rock.width * 0.3, rock.height * 0.3);
+  });
+}
+
 function drawPlasmid(char: Character) {
-  // Jelly blob with glow
-  const gradient = ctx.createRadialGradient(char.x, char.y, 0, char.x, char.y, char.radius);
   const color = char.team === 0 ? '#00ffaa' : '#ff00aa';
+
+  // Jelly body with wobble
+  ctx.save();
+  ctx.translate(char.x, char.y);
+
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, char.radius);
   gradient.addColorStop(0, color);
   gradient.addColorStop(0.7, color + '80');
   gradient.addColorStop(1, color + '20');
-
   ctx.fillStyle = gradient;
+
   ctx.beginPath();
-  // Wobbly blob shape
   for (let i = 0; i <= 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
     const wobble = Math.sin(Date.now() * 0.003 + i) * 3;
     const r = char.radius + wobble;
-    const x = char.x + Math.cos(angle) * r;
-    const y = char.y + Math.sin(angle) * r;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
   ctx.closePath();
   ctx.fill();
+
+  // Arms (little pseudopods)
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+
+  const armWave = Math.sin(Date.now() * 0.005);
+  ctx.beginPath();
+  ctx.moveTo(-char.radius * 0.7, 0);
+  ctx.lineTo(-char.radius * 1.2, armWave * 10);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(char.radius * 0.7, 0);
+  ctx.lineTo(char.radius * 1.2, -armWave * 10);
+  ctx.stroke();
+
+  // Face
+  ctx.fillStyle = '#000000';
+  // Eyes
+  const eyeSize = char.expression === 'hurt' ? 2 : 4;
+  ctx.beginPath();
+  ctx.arc(-7, -5, eyeSize, 0, Math.PI * 2);
+  ctx.arc(7, -5, eyeSize, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mouth
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (char.expression === 'happy') {
+    ctx.arc(0, 0, 8, 0.2, Math.PI - 0.2);
+  } else if (char.expression === 'hurt') {
+    ctx.arc(0, 8, 8, Math.PI + 0.2, Math.PI * 2 - 0.2);
+  } else {
+    ctx.moveTo(-6, 5);
+    ctx.lineTo(6, 5);
+  }
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawNeonoid(char: Character) {
-  // Neon cube outline
   const color = char.team === 0 ? '#00ffff' : '#ff0088';
+
+  ctx.save();
+  ctx.translate(char.x, char.y);
+
+  // Body (rectangle with glow)
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.shadowColor = color;
   ctx.shadowBlur = 15;
 
-  const size = char.radius * 1.5;
-  ctx.strokeRect(char.x - size/2, char.y - size/2, size, size);
-
-  // Inner glow
-  ctx.strokeStyle = color + '40';
-  ctx.strokeRect(char.x - size/3, char.y - size/3, size * 2/3, size * 2/3);
-
+  const bodyWidth = char.radius * 1.5;
+  const bodyHeight = char.radius * 1.8;
+  ctx.strokeRect(-bodyWidth/2, -bodyHeight/2, bodyWidth, bodyHeight);
   ctx.shadowBlur = 0;
+
+  // Arms
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-bodyWidth/2, -bodyHeight * 0.2);
+  ctx.lineTo(-bodyWidth * 0.9, -bodyHeight * 0.3);
+  ctx.moveTo(bodyWidth/2, -bodyHeight * 0.2);
+  ctx.lineTo(bodyWidth * 0.9, -bodyHeight * 0.3);
+  ctx.stroke();
+
+  // Legs
+  ctx.beginPath();
+  ctx.moveTo(-bodyWidth * 0.3, bodyHeight/2);
+  ctx.lineTo(-bodyWidth * 0.4, bodyHeight * 0.8);
+  ctx.moveTo(bodyWidth * 0.3, bodyHeight/2);
+  ctx.lineTo(bodyWidth * 0.4, bodyHeight * 0.8);
+  ctx.stroke();
+
+  // Face screen
+  ctx.fillStyle = color + '40';
+  ctx.fillRect(-bodyWidth * 0.3, -bodyHeight * 0.35, bodyWidth * 0.6, bodyHeight * 0.4);
+
+  // Eyes (digital)
+  ctx.fillStyle = color;
+  if (char.expression === 'focused') {
+    ctx.fillRect(-8, -10, 5, 3);
+    ctx.fillRect(3, -10, 5, 3);
+  } else if (char.expression === 'hurt') {
+    // X eyes
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-8, -10);
+    ctx.lineTo(-4, -6);
+    ctx.moveTo(-8, -6);
+    ctx.lineTo(-4, -10);
+    ctx.moveTo(4, -10);
+    ctx.lineTo(8, -6);
+    ctx.moveTo(4, -6);
+    ctx.lineTo(8, -10);
+    ctx.stroke();
+  } else {
+    ctx.fillRect(-8, -10, 4, 6);
+    ctx.fillRect(4, -10, 4, 6);
+  }
+
+  // Mouth
+  if (char.expression === 'happy') {
+    ctx.fillRect(-6, 2, 12, 2);
+  } else if (char.expression === 'angry') {
+    ctx.fillRect(-6, 5, 12, 2);
+  }
+
+  ctx.restore();
 }
 
 function drawVoidling(char: Character) {
-  // Shadow blob
   const color = char.team === 0 ? '#6a0dad' : '#8b0000';
-  const gradient = ctx.createRadialGradient(char.x, char.y, 0, char.x, char.y, char.radius);
-  gradient.addColorStop(0, '#000000');
+
+  ctx.save();
+  ctx.translate(char.x, char.y);
+
+  // Shadow body
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, char.radius);
+  gradient.addColorStop(0, '#1a1a1a');
   gradient.addColorStop(0.5, color + '60');
   gradient.addColorStop(1, color + '20');
 
   ctx.fillStyle = gradient;
   ctx.beginPath();
-  ctx.arc(char.x, char.y, char.radius, 0, Math.PI * 2);
+
+  // Ghostly body with wispy bottom
+  for (let i = 0; i <= 16; i++) {
+    const angle = (i / 16) * Math.PI * 2;
+    let r = char.radius;
+
+    // Make bottom wavy
+    if (angle > Math.PI * 0.3 && angle < Math.PI * 0.7) {
+      r += Math.sin(Date.now() * 0.01 + i) * 5;
+    }
+    if (angle > Math.PI * 1.3 && angle < Math.PI * 1.7) {
+      r += Math.sin(Date.now() * 0.01 + i) * 5;
+    }
+
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
   ctx.fill();
+
+  // Wispy arms
+  ctx.strokeStyle = color + '80';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+
+  const float = Math.sin(Date.now() * 0.004) * 5;
+  ctx.beginPath();
+  ctx.moveTo(-char.radius * 0.6, 0);
+  ctx.quadraticCurveTo(-char.radius * 0.9, float, -char.radius * 1.1, float - 5);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(char.radius * 0.6, 0);
+  ctx.quadraticCurveTo(char.radius * 0.9, -float, char.radius * 1.1, -float + 5);
+  ctx.stroke();
 
   // Glowing eyes
   ctx.fillStyle = '#ffff00';
   ctx.shadowColor = '#ffff00';
-  ctx.shadowBlur = 10;
-  ctx.beginPath();
-  ctx.arc(char.x - 8, char.y - 5, 3, 0, Math.PI * 2);
-  ctx.arc(char.x + 8, char.y - 5, 3, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.shadowBlur = 15;
+
+  if (char.expression === 'angry') {
+    // Angry slanted eyes
+    ctx.beginPath();
+    ctx.moveTo(-10, -8);
+    ctx.lineTo(-6, -6);
+    ctx.lineTo(-6, -10);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(10, -8);
+    ctx.lineTo(6, -6);
+    ctx.lineTo(6, -10);
+    ctx.fill();
+  } else if (char.expression === 'hurt') {
+    // Dim eyes
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.arc(-8, -6, 3, 0, Math.PI * 2);
+    ctx.arc(8, -6, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  } else {
+    // Normal round eyes
+    ctx.beginPath();
+    ctx.arc(-8, -6, 4, 0, Math.PI * 2);
+    ctx.arc(8, -6, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.shadowBlur = 0;
+
+  // Spooky mouth
+  if (char.expression === 'happy') {
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(0, 2, 6, 0, Math.PI);
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 function drawCharacter(char: Character) {
@@ -206,7 +536,7 @@ function drawCharacter(char: Character) {
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
-    ctx.arc(char.x, char.y, char.radius + 10, 0, Math.PI * 2);
+    ctx.arc(char.x, char.y, char.radius + 15, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
   }
@@ -226,38 +556,38 @@ function drawCharacter(char: Character) {
 
   // HP bar
   const barWidth = char.radius * 2;
-  const barHeight = 4;
+  const barHeight = 5;
   const barX = char.x - barWidth / 2;
-  const barY = char.y - char.radius - 15;
+  const barY = char.y - char.radius - 25;
 
-  ctx.fillStyle = '#333';
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(barX, barY, barWidth, barHeight);
   ctx.fillStyle = char.hp > 50 ? '#00ff00' : char.hp > 25 ? '#ffff00' : '#ff0000';
   ctx.fillRect(barX, barY, (char.hp / 100) * barWidth, barHeight);
+
+  // HP outline
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barWidth, barHeight);
 }
 
 // Physics
 function updatePhysics() {
   characters.forEach(char => {
-    // Apply gravity
     char.vy += GRAVITY;
-
-    // Update position
     char.x += char.vx;
     char.y += char.vy;
 
-    // Ground collision
     if (char.y + char.radius > GROUND_Y) {
       char.y = GROUND_Y - char.radius;
-      char.vy = -char.vy * 0.5; // Bounce with damping
-      char.vx *= 0.8; // Friction
+      char.vy = -char.vy * 0.5;
+      char.vx *= 0.8;
 
       if (Math.abs(char.vy) < 0.5) {
         char.vy = 0;
       }
     }
 
-    // Wall collision
     if (char.x - char.radius < 0) {
       char.x = char.radius;
       char.vx = -char.vx * 0.5;
@@ -271,44 +601,80 @@ function updatePhysics() {
 
 // Input Handler
 canvas.addEventListener('click', (e) => {
+  if (!gameStarted) return;
+
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
 
   const activeChar = characters.find(c => c.active);
-  if (!activeChar) return;
+  if (!activeChar || activeChar.team !== 0) return; // Only allow player moves
 
-  // Calculate direction from character to click
   const dx = clickX - activeChar.x;
   const dy = clickY - activeChar.y;
 
-  // Apply impulse
   activeChar.vx = dx * LAUNCH_POWER;
   activeChar.vy = dy * LAUNCH_POWER;
+  activeChar.expression = 'focused';
 
-  // Switch turn after a delay
   setTimeout(() => {
     activeChar.active = false;
-    currentTeam = (currentTeam + 1) % 2;
+    activeChar.expression = 'happy';
+    currentTeam = 1;
 
-    // Find next character on current team
+    const teamChars = characters.filter(c => c.team === currentTeam && c.hp > 0);
+    if (teamChars.length > 0) {
+      teamChars[0].active = true;
+      updateTurnInfo();
+
+      // AI move after short delay
+      setTimeout(aiMove, 1000);
+    }
+  }, 2000);
+});
+
+// Simple AI
+function aiMove() {
+  const activeChar = characters.find(c => c.active);
+  if (!activeChar || activeChar.team !== 1) return;
+
+  const playerChars = characters.filter(c => c.team === 0);
+  const target = playerChars[Math.floor(Math.random() * playerChars.length)];
+
+  const dx = target.x - activeChar.x + (Math.random() - 0.5) * 100;
+  const dy = target.y - activeChar.y - 50;
+
+  activeChar.vx = dx * LAUNCH_POWER * 0.8;
+  activeChar.vy = dy * LAUNCH_POWER * 0.8;
+  activeChar.expression = 'angry';
+
+  setTimeout(() => {
+    activeChar.active = false;
+    activeChar.expression = 'happy';
+    currentTeam = 0;
+
     const teamChars = characters.filter(c => c.team === currentTeam && c.hp > 0);
     if (teamChars.length > 0) {
       teamChars[0].active = true;
       updateTurnInfo();
     }
   }, 2000);
-});
+}
 
 // Game Loop
 function update() {
+  if (!gameStarted) return;
   updatePhysics();
 }
 
 function render() {
   drawBackground();
   drawGround();
-  characters.forEach(drawCharacter);
+  drawRocks();
+  drawPlants();
+  if (gameStarted) {
+    characters.forEach(drawCharacter);
+  }
 }
 
 function gameLoop() {
@@ -317,9 +683,30 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// Start Game
-initStars();
-initGame();
+// Team Selection
+document.getElementById('selectPlasmid')!.addEventListener('click', () => startGame('plasmid'));
+document.getElementById('selectNeonoid')!.addEventListener('click', () => startGame('neonoid'));
+document.getElementById('selectVoidling')!.addEventListener('click', () => startGame('voidling'));
+
+function startGame(playerType: CharacterType) {
+  playerTeamType = playerType;
+
+  // Choose random enemy type
+  const types: CharacterType[] = ['plasmid', 'neonoid', 'voidling'];
+  const remaining = types.filter(t => t !== playerType);
+  enemyTeamType = remaining[Math.floor(Math.random() * remaining.length)];
+
+  // Hide selection, show game
+  teamSelect.style.display = 'none';
+  canvas.style.display = 'block';
+  gameInfo.style.display = 'block';
+
+  gameStarted = true;
+  initGame(playerTeamType, enemyTeamType);
+}
+
+// Start rendering
+initEnvironment();
 gameLoop();
 </script>
 
@@ -327,5 +714,19 @@ gameLoop();
   #gameCanvas {
     max-width: 100%;
     height: auto;
+  }
+
+  .team-btn {
+    cursor: pointer;
+    transform: scale(1);
+    transition: transform 0.2s;
+  }
+
+  .team-btn:hover {
+    transform: scale(1.05);
+  }
+
+  .team-btn:active {
+    transform: scale(0.95);
   }
 </style>
