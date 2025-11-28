@@ -9,7 +9,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
       <a href="/experiments" class="text-sm text-[#4B5563] hover:text-[#2A3D56]">← Back to Experiments</a>
     </div>
     <p class="text-sm md:text-base text-[#4B5563] max-w-2xl">
-      Choose your team and battle on an alien desert planet! Each character has unique personalities and abilities.
+      Battle on Mars with unique weapons! Choose your team and aim carefully to defeat your enemies.
     </p>
 
     <div class="flex flex-col items-center space-y-4 mt-6">
@@ -21,30 +21,43 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
             <div class="text-center">
               <div class="text-3xl mb-2">💧</div>
               <div class="font-semibold text-[#00ffaa]">PLASMIDS</div>
-              <div class="text-xs text-gray-600">Bouncy & Cheerful</div>
+              <div class="text-xs text-gray-600">Acid, Goo, Splash</div>
             </div>
           </button>
           <button id="selectNeonoid" class="team-btn p-4 border-2 border-[#00ffff] rounded-lg hover:bg-[#00ffff] hover:bg-opacity-10 transition-all">
             <div class="text-center">
               <div class="text-3xl mb-2">📦</div>
               <div class="font-semibold text-[#00ffff]">NEONOIDS</div>
-              <div class="text-xs text-gray-600">Angular & Focused</div>
+              <div class="text-xs text-gray-600">Laser, Pulse, Beam</div>
             </div>
           </button>
           <button id="selectVoidling" class="team-btn p-4 border-2 border-[#6a0dad] rounded-lg hover:bg-[#6a0dad] hover:bg-opacity-10 transition-all">
             <div class="text-center">
               <div class="text-3xl mb-2">👻</div>
               <div class="font-semibold text-[#6a0dad]">VOIDLINGS</div>
-              <div class="text-xs text-gray-600">Mysterious & Spooky</div>
+              <div class="text-xs text-gray-600">Shadow, Curse, Void</div>
             </div>
           </button>
         </div>
       </div>
 
       <canvas id="gameCanvas" width="900" height="500" class="border-2 border-[#2A3D56] rounded-lg shadow-lg" style="display:none;"></canvas>
+
+      <!-- Weapon Selection UI -->
+      <div id="weaponSelect" class="bg-white p-4 rounded-lg shadow-lg border-2 border-[#2A3D56]" style="display:none;">
+        <h3 class="text-sm font-semibold text-[#2A3D56] mb-2 text-center">Choose Your Weapon</h3>
+        <div id="weaponButtons" class="flex gap-2 justify-center"></div>
+      </div>
+
       <div id="gameInfo" class="text-sm text-[#4B5563] text-center" style="display:none;">
-        <p>Click on the canvas to launch your active character!</p>
+        <p id="instructions">Choose a weapon, then click to aim and fire!</p>
         <p id="turnInfo" class="font-semibold mt-2"></p>
+      </div>
+
+      <!-- Game Over Screen -->
+      <div id="gameOver" class="bg-white p-6 rounded-lg shadow-lg border-2 border-[#2A3D56]" style="display:none;">
+        <h2 class="text-xl font-semibold text-[#2A3D56] mb-4 text-center" id="gameOverText"></h2>
+        <button id="playAgain" class="px-6 py-2 bg-[#2A3D56] text-white rounded-lg hover:bg-[#3a4d66]">Play Again</button>
       </div>
     </div>
   </div>
@@ -55,16 +68,22 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const turnInfo = document.getElementById('turnInfo')!;
+const instructions = document.getElementById('instructions')!;
 const teamSelect = document.getElementById('teamSelect')!;
+const weaponSelect = document.getElementById('weaponSelect')!;
+const weaponButtons = document.getElementById('weaponButtons')!;
 const gameInfo = document.getElementById('gameInfo')!;
+const gameOver = document.getElementById('gameOver')!;
+const gameOverText = document.getElementById('gameOverText')!;
+const playAgain = document.getElementById('playAgain')!;
 
 // Constants
-const GRAVITY = 0.3;
+const GRAVITY = 0.5;
 const GROUND_Y = 420;
-const LAUNCH_POWER = 0.15;
 
 // Character Types
 type CharacterType = 'plasmid' | 'neonoid' | 'voidling';
+type WeaponType = string;
 
 interface Character {
   x: number;
@@ -72,6 +91,7 @@ interface Character {
   vx: number;
   vy: number;
   hp: number;
+  maxHp: number;
   type: CharacterType;
   team: number;
   radius: number;
@@ -79,11 +99,32 @@ interface Character {
   expression: 'happy' | 'focused' | 'angry' | 'hurt';
 }
 
+interface Weapon {
+  name: string;
+  damage: number;
+  speed: number;
+  size: number;
+  color: string;
+  effect: string;
+}
+
+interface Projectile {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  weapon: Weapon;
+  team: number;
+  active: boolean;
+}
+
 interface Plant {
   x: number;
   y: number;
-  type: 'spike' | 'mushroom' | 'crystal';
+  type: 'whoville' | 'truffula' | 'spiral';
   height: number;
+  color: string;
+  bendAngle: number;
 }
 
 interface Rock {
@@ -91,36 +132,69 @@ interface Rock {
   y: number;
   width: number;
   height: number;
+  color: string;
 }
+
+// Weapon definitions for each character type
+const WEAPONS: Record<CharacterType, Weapon[]> = {
+  plasmid: [
+    { name: 'Acid Blob', damage: 20, speed: 8, size: 8, color: '#00ff00', effect: 'splash' },
+    { name: 'Goo Ball', damage: 15, speed: 6, size: 12, color: '#00ffaa', effect: 'slow' },
+    { name: 'Mega Splash', damage: 25, speed: 7, size: 10, color: '#00ff88', effect: 'burst' }
+  ],
+  neonoid: [
+    { name: 'Laser Beam', damage: 22, speed: 12, size: 4, color: '#00ffff', effect: 'pierce' },
+    { name: 'Pulse Wave', damage: 18, speed: 9, size: 6, color: '#0088ff', effect: 'wave' },
+    { name: 'Power Beam', damage: 24, speed: 10, size: 5, color: '#00ccff', effect: 'electric' }
+  ],
+  voidling: [
+    { name: 'Shadow Bolt', damage: 21, speed: 8, size: 7, color: '#6a0dad', effect: 'shadow' },
+    { name: 'Dark Curse', damage: 16, speed: 7, size: 9, color: '#8b0000', effect: 'curse' },
+    { name: 'Void Strike', damage: 26, speed: 9, size: 6, color: '#4a0080', effect: 'void' }
+  ]
+};
 
 // Game State
 let characters: Character[] = [];
+let projectiles: Projectile[] = [];
 let currentTeam = 0;
 let plants: Plant[] = [];
 let rocks: Rock[] = [];
 let playerTeamType: CharacterType;
 let enemyTeamType: CharacterType;
 let gameStarted = false;
+let selectedWeapon: Weapon | null = null;
+let aimingMode = false;
+let mouseX = 0;
+let mouseY = 0;
 
 // Environment setup
 function initEnvironment() {
-  // Add alien plants
-  for (let i = 0; i < 8; i++) {
+  plants = [];
+  rocks = [];
+
+  // Add Dr. Seuss style plants
+  const plantColors = ['#ff6b9d', '#ffaa00', '#00ff88', '#ff0088', '#00aaff', '#ff00ff'];
+  for (let i = 0; i < 10; i++) {
     plants.push({
       x: Math.random() * canvas.width,
       y: GROUND_Y,
-      type: ['spike', 'mushroom', 'crystal'][Math.floor(Math.random() * 3)] as any,
-      height: 20 + Math.random() * 30
+      type: ['whoville', 'truffula', 'spiral'][Math.floor(Math.random() * 3)] as any,
+      height: 40 + Math.random() * 80,
+      color: plantColors[Math.floor(Math.random() * plantColors.length)],
+      bendAngle: (Math.random() - 0.5) * 0.5
     });
   }
 
-  // Add rocks
-  for (let i = 0; i < 6; i++) {
+  // Add Martian rocks (reddish)
+  const rockColors = ['#8b4513', '#a0522d', '#cd5c5c', '#b8860b'];
+  for (let i = 0; i < 8; i++) {
     rocks.push({
       x: Math.random() * canvas.width,
       y: GROUND_Y - Math.random() * 20,
-      width: 30 + Math.random() * 40,
-      height: 20 + Math.random() * 30
+      width: 30 + Math.random() * 50,
+      height: 20 + Math.random() * 40,
+      color: rockColors[Math.floor(Math.random() * rockColors.length)]
     });
   }
 }
@@ -128,7 +202,7 @@ function initEnvironment() {
 // Character Factories
 function createCharacter(type: CharacterType, x: number, y: number, team: number): Character {
   return {
-    x, y, vx: 0, vy: 0, hp: 100, type, team,
+    x, y, vx: 0, vy: 0, hp: 100, maxHp: 100, type, team,
     radius: type === 'plasmid' ? 25 : type === 'neonoid' ? 20 : 22,
     active: false,
     expression: 'happy'
@@ -138,21 +212,23 @@ function createCharacter(type: CharacterType, x: number, y: number, team: number
 // Initialize Game with selected teams
 function initGame(playerType: CharacterType, enemyType: CharacterType) {
   characters = [];
+  projectiles = [];
 
   // Player team (left side)
-  const playerX1 = 100 + Math.random() * 100;
-  const playerX2 = 150 + Math.random() * 100;
+  const playerX1 = 100 + Math.random() * 50;
+  const playerX2 = 150 + Math.random() * 50;
   characters.push(createCharacter(playerType, playerX1, 200, 0));
   characters.push(createCharacter(playerType, playerX2, 250, 0));
 
   // Enemy team (right side)
-  const enemyX1 = 600 + Math.random() * 100;
-  const enemyX2 = 650 + Math.random() * 100;
+  const enemyX1 = 650 + Math.random() * 50;
+  const enemyX2 = 700 + Math.random() * 50;
   characters.push(createCharacter(enemyType, enemyX1, 200, 1));
   characters.push(createCharacter(enemyType, enemyX2, 250, 1));
 
   characters[0].active = true;
   updateTurnInfo();
+  showWeaponSelect();
 }
 
 // Update turn information
@@ -164,49 +240,101 @@ function updateTurnInfo() {
   }
 }
 
+// Weapon Selection UI
+function showWeaponSelect() {
+  const activeChar = characters.find(c => c.active);
+  if (!activeChar) return;
+
+  weaponButtons.innerHTML = '';
+  const weapons = WEAPONS[activeChar.type];
+
+  weapons.forEach((weapon, index) => {
+    const btn = document.createElement('button');
+    btn.className = 'weapon-btn px-3 py-2 border-2 rounded-lg text-xs font-semibold transition-all';
+    btn.style.borderColor = weapon.color;
+    btn.style.color = weapon.color;
+    btn.textContent = `${weapon.name} (${weapon.damage}dmg)`;
+    btn.onclick = () => selectWeapon(weapon);
+    weaponButtons.appendChild(btn);
+  });
+
+  if (activeChar.team === 0) {
+    weaponSelect.style.display = 'block';
+    aimingMode = false;
+    selectedWeapon = null;
+  } else {
+    weaponSelect.style.display = 'none';
+    // AI selects weapon
+    setTimeout(() => {
+      const randomWeapon = weapons[Math.floor(Math.random() * weapons.length)];
+      aiAttack(randomWeapon);
+    }, 1000);
+  }
+}
+
+function selectWeapon(weapon: Weapon) {
+  selectedWeapon = weapon;
+  aimingMode = true;
+  instructions.textContent = 'Click on canvas to aim and fire!';
+
+  // Highlight selected weapon
+  Array.from(weaponButtons.children).forEach((btn, i) => {
+    const weapons = WEAPONS[characters.find(c => c.active)!.type];
+    if (weapons[i] === weapon) {
+      (btn as HTMLElement).style.backgroundColor = weapon.color + '20';
+    } else {
+      (btn as HTMLElement).style.backgroundColor = 'transparent';
+    }
+  });
+}
+
 // Drawing Functions
 function drawBackground() {
-  // Alien sky gradient (pinkish/purple)
+  // Martian sky gradient (orange/red)
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, '#ff6b9d');
-  gradient.addColorStop(0.5, '#c44569');
-  gradient.addColorStop(1, '#8b6b8b');
+  gradient.addColorStop(0, '#ff9966');
+  gradient.addColorStop(0.4, '#ff6b4a');
+  gradient.addColorStop(1, '#cc5533');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Distant alien suns/moons
-  ctx.fillStyle = '#ffe5b4';
-  ctx.shadowColor = '#ffe5b4';
-  ctx.shadowBlur = 30;
+  // Two suns
+  ctx.fillStyle = '#ffee88';
+  ctx.shadowColor = '#ffee88';
+  ctx.shadowBlur = 40;
   ctx.beginPath();
-  ctx.arc(150, 80, 40, 0, Math.PI * 2);
+  ctx.arc(150, 80, 35, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = '#b4e5ff';
-  ctx.shadowColor = '#b4e5ff';
-  ctx.shadowBlur = 20;
+  ctx.fillStyle = '#ffaa44';
+  ctx.shadowColor = '#ffaa44';
+  ctx.shadowBlur = 25;
   ctx.beginPath();
-  ctx.arc(750, 100, 25, 0, Math.PI * 2);
+  ctx.arc(750, 100, 22, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
 }
 
 function drawGround() {
-  // Desert sand with texture
-  ctx.fillStyle = '#d4a574';
+  // Martian desert (reddish-orange)
+  const gradient = ctx.createLinearGradient(0, GROUND_Y, 0, canvas.height);
+  gradient.addColorStop(0, '#cc6644');
+  gradient.addColorStop(1, '#aa4422');
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
 
-  // Sand texture
-  ctx.fillStyle = '#c49563';
-  for (let i = 0; i < 50; i++) {
+  // Rocky texture
+  ctx.fillStyle = '#994433';
+  for (let i = 0; i < 60; i++) {
     const x = Math.random() * canvas.width;
     const y = GROUND_Y + Math.random() * 80;
-    ctx.fillRect(x, y, 2, 1);
+    const size = Math.random() * 3;
+    ctx.fillRect(x, y, size, size);
   }
 
   // Ground line
-  ctx.strokeStyle = '#8b6f47';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#883322';
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(0, GROUND_Y);
   ctx.lineTo(canvas.width, GROUND_Y);
@@ -218,59 +346,94 @@ function drawPlants() {
     ctx.save();
     ctx.translate(plant.x, plant.y);
 
-    if (plant.type === 'spike') {
-      // Spiky alien plant
-      ctx.fillStyle = '#4a7c59';
+    if (plant.type === 'whoville') {
+      // Whoville-style curvy plant
+      ctx.rotate(plant.bendAngle);
+      ctx.strokeStyle = plant.color;
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(-5, -plant.height);
-      ctx.lineTo(5, -plant.height);
-      ctx.closePath();
-      ctx.fill();
+      ctx.quadraticCurveTo(
+        Math.sin(Date.now() * 0.001) * 20,
+        -plant.height / 2,
+        Math.sin(Date.now() * 0.002) * 30,
+        -plant.height
+      );
+      ctx.stroke();
 
-      // Spikes
-      ctx.strokeStyle = '#2d5a3d';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        const y = -(plant.height * (i / 3));
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(-8, y - 5);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(8, y - 5);
-        ctx.stroke();
-      }
-    } else if (plant.type === 'mushroom') {
-      // Alien mushroom
-      ctx.fillStyle = '#7c4a6f';
-      ctx.beginPath();
-      ctx.arc(0, -plant.height, 12, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#9d6b8f';
-      ctx.fillRect(-3, -plant.height, 6, plant.height);
-
-      // Spots
-      ctx.fillStyle = '#ff6b9d';
-      ctx.beginPath();
-      ctx.arc(-5, -plant.height - 2, 2, 0, Math.PI * 2);
-      ctx.arc(5, -plant.height + 1, 2, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Crystal
-      ctx.fillStyle = '#4ab8ff';
-      ctx.shadowColor = '#4ab8ff';
+      // Pom-pom top
+      ctx.fillStyle = plant.color;
+      ctx.shadowColor = plant.color;
       ctx.shadowBlur = 10;
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const x = Math.sin(Date.now() * 0.002) * 30 + Math.cos(angle) * 12;
+        const y = -plant.height + Math.sin(angle) * 12;
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+
+    } else if (plant.type === 'truffula') {
+      // Truffula tree style
+      ctx.strokeStyle = '#8b4513';
+      ctx.lineWidth = 6;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(-6, -plant.height);
-      ctx.lineTo(0, -plant.height - 10);
-      ctx.lineTo(6, -plant.height);
+      ctx.lineTo(0, -plant.height * 0.7);
+      ctx.stroke();
+
+      // Fluffy top
+      ctx.fillStyle = plant.color;
+      ctx.shadowColor = plant.color;
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const angle = (i / 16) * Math.PI * 2;
+        const puff = Math.sin(Date.now() * 0.003 + i) * 5;
+        const x = Math.cos(angle) * (20 + puff);
+        const y = -plant.height * 0.7 + Math.sin(angle) * (15 + puff);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
+
+    } else {
+      // Spiral plant
+      ctx.strokeStyle = plant.color;
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const angle = t * Math.PI * 4 + Date.now() * 0.001;
+        const radius = (1 - t) * 15;
+        const x = Math.cos(angle) * radius;
+        const y = -t * plant.height;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Star on top
+      ctx.fillStyle = plant.color;
+      const starY = -plant.height;
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(angle) * 8;
+        const y = starY + Math.sin(angle) * 8;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
     }
 
     ctx.restore();
@@ -279,23 +442,25 @@ function drawPlants() {
 
 function drawRocks() {
   rocks.forEach(rock => {
-    ctx.fillStyle = '#6b5b4f';
+    // Main rock
+    ctx.fillStyle = rock.color;
     ctx.fillRect(rock.x, rock.y - rock.height, rock.width, rock.height);
 
     // Highlight
-    ctx.fillStyle = '#8b7b6f';
-    ctx.fillRect(rock.x, rock.y - rock.height, rock.width / 3, rock.height / 3);
+    ctx.fillStyle = rock.color.replace(/[0-9a-f]{2}(?=[0-9a-f]{2}[0-9a-f]{2}$)/, (match) =>
+      Math.min(255, parseInt(match, 16) + 30).toString(16).padStart(2, '0')
+    );
+    ctx.fillRect(rock.x, rock.y - rock.height, rock.width / 3, rock.height / 4);
 
     // Shadow
-    ctx.fillStyle = '#4b3b2f';
-    ctx.fillRect(rock.x + rock.width * 0.7, rock.y - rock.height * 0.3, rock.width * 0.3, rock.height * 0.3);
+    ctx.fillStyle = '#00000030';
+    ctx.fillRect(rock.x + rock.width * 0.6, rock.y - rock.height * 0.4, rock.width * 0.4, rock.height * 0.4);
   });
 }
 
 function drawPlasmid(char: Character) {
   const color = char.team === 0 ? '#00ffaa' : '#ff00aa';
 
-  // Jelly body with wobble
   ctx.save();
   ctx.translate(char.x, char.y);
 
@@ -318,7 +483,7 @@ function drawPlasmid(char: Character) {
   ctx.closePath();
   ctx.fill();
 
-  // Arms (little pseudopods)
+  // Arms
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
@@ -336,14 +501,12 @@ function drawPlasmid(char: Character) {
 
   // Face
   ctx.fillStyle = '#000000';
-  // Eyes
   const eyeSize = char.expression === 'hurt' ? 2 : 4;
   ctx.beginPath();
   ctx.arc(-7, -5, eyeSize, 0, Math.PI * 2);
   ctx.arc(7, -5, eyeSize, 0, Math.PI * 2);
   ctx.fill();
 
-  // Mouth
   ctx.strokeStyle = '#000000';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -366,7 +529,6 @@ function drawNeonoid(char: Character) {
   ctx.save();
   ctx.translate(char.x, char.y);
 
-  // Body (rectangle with glow)
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.shadowColor = color;
@@ -377,55 +539,42 @@ function drawNeonoid(char: Character) {
   ctx.strokeRect(-bodyWidth/2, -bodyHeight/2, bodyWidth, bodyHeight);
   ctx.shadowBlur = 0;
 
-  // Arms
+  // Arms & Legs
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(-bodyWidth/2, -bodyHeight * 0.2);
   ctx.lineTo(-bodyWidth * 0.9, -bodyHeight * 0.3);
   ctx.moveTo(bodyWidth/2, -bodyHeight * 0.2);
   ctx.lineTo(bodyWidth * 0.9, -bodyHeight * 0.3);
-  ctx.stroke();
-
-  // Legs
-  ctx.beginPath();
   ctx.moveTo(-bodyWidth * 0.3, bodyHeight/2);
   ctx.lineTo(-bodyWidth * 0.4, bodyHeight * 0.8);
   ctx.moveTo(bodyWidth * 0.3, bodyHeight/2);
   ctx.lineTo(bodyWidth * 0.4, bodyHeight * 0.8);
   ctx.stroke();
 
-  // Face screen
+  // Face
   ctx.fillStyle = color + '40';
   ctx.fillRect(-bodyWidth * 0.3, -bodyHeight * 0.35, bodyWidth * 0.6, bodyHeight * 0.4);
 
-  // Eyes (digital)
   ctx.fillStyle = color;
   if (char.expression === 'focused') {
     ctx.fillRect(-8, -10, 5, 3);
     ctx.fillRect(3, -10, 5, 3);
   } else if (char.expression === 'hurt') {
-    // X eyes
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(-8, -10);
-    ctx.lineTo(-4, -6);
-    ctx.moveTo(-8, -6);
-    ctx.lineTo(-4, -10);
-    ctx.moveTo(4, -10);
-    ctx.lineTo(8, -6);
-    ctx.moveTo(4, -6);
-    ctx.lineTo(8, -10);
+    ctx.moveTo(-8, -10); ctx.lineTo(-4, -6);
+    ctx.moveTo(-8, -6); ctx.lineTo(-4, -10);
+    ctx.moveTo(4, -10); ctx.lineTo(8, -6);
+    ctx.moveTo(4, -6); ctx.lineTo(8, -10);
     ctx.stroke();
   } else {
     ctx.fillRect(-8, -10, 4, 6);
     ctx.fillRect(4, -10, 4, 6);
   }
 
-  // Mouth
   if (char.expression === 'happy') {
     ctx.fillRect(-6, 2, 12, 2);
-  } else if (char.expression === 'angry') {
-    ctx.fillRect(-6, 5, 12, 2);
   }
 
   ctx.restore();
@@ -437,7 +586,6 @@ function drawVoidling(char: Character) {
   ctx.save();
   ctx.translate(char.x, char.y);
 
-  // Shadow body
   const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, char.radius);
   gradient.addColorStop(0, '#1a1a1a');
   gradient.addColorStop(0.5, color + '60');
@@ -446,12 +594,10 @@ function drawVoidling(char: Character) {
   ctx.fillStyle = gradient;
   ctx.beginPath();
 
-  // Ghostly body with wispy bottom
   for (let i = 0; i <= 16; i++) {
     const angle = (i / 16) * Math.PI * 2;
     let r = char.radius;
 
-    // Make bottom wavy
     if (angle > Math.PI * 0.3 && angle < Math.PI * 0.7) {
       r += Math.sin(Date.now() * 0.01 + i) * 5;
     }
@@ -467,7 +613,7 @@ function drawVoidling(char: Character) {
   ctx.closePath();
   ctx.fill();
 
-  // Wispy arms
+  // Arms
   ctx.strokeStyle = color + '80';
   ctx.lineWidth = 4;
   ctx.lineCap = 'round';
@@ -483,25 +629,19 @@ function drawVoidling(char: Character) {
   ctx.quadraticCurveTo(char.radius * 0.9, -float, char.radius * 1.1, -float + 5);
   ctx.stroke();
 
-  // Glowing eyes
+  // Eyes
   ctx.fillStyle = '#ffff00';
   ctx.shadowColor = '#ffff00';
   ctx.shadowBlur = 15;
 
   if (char.expression === 'angry') {
-    // Angry slanted eyes
     ctx.beginPath();
-    ctx.moveTo(-10, -8);
-    ctx.lineTo(-6, -6);
-    ctx.lineTo(-6, -10);
+    ctx.moveTo(-10, -8); ctx.lineTo(-6, -6); ctx.lineTo(-6, -10);
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(10, -8);
-    ctx.lineTo(6, -6);
-    ctx.lineTo(6, -10);
+    ctx.moveTo(10, -8); ctx.lineTo(6, -6); ctx.lineTo(6, -10);
     ctx.fill();
   } else if (char.expression === 'hurt') {
-    // Dim eyes
     ctx.globalAlpha = 0.3;
     ctx.beginPath();
     ctx.arc(-8, -6, 3, 0, Math.PI * 2);
@@ -509,7 +649,6 @@ function drawVoidling(char: Character) {
     ctx.fill();
     ctx.globalAlpha = 1;
   } else {
-    // Normal round eyes
     ctx.beginPath();
     ctx.arc(-8, -6, 4, 0, Math.PI * 2);
     ctx.arc(8, -6, 4, 0, Math.PI * 2);
@@ -518,7 +657,6 @@ function drawVoidling(char: Character) {
 
   ctx.shadowBlur = 0;
 
-  // Spooky mouth
   if (char.expression === 'happy') {
     ctx.fillStyle = '#000000';
     ctx.beginPath();
@@ -530,7 +668,6 @@ function drawVoidling(char: Character) {
 }
 
 function drawCharacter(char: Character) {
-  // Active indicator
   if (char.active) {
     ctx.strokeStyle = '#ffff00';
     ctx.lineWidth = 2;
@@ -541,130 +678,270 @@ function drawCharacter(char: Character) {
     ctx.setLineDash([]);
   }
 
-  // Draw based on type
   switch (char.type) {
-    case 'plasmid':
-      drawPlasmid(char);
-      break;
-    case 'neonoid':
-      drawNeonoid(char);
-      break;
-    case 'voidling':
-      drawVoidling(char);
-      break;
+    case 'plasmid': drawPlasmid(char); break;
+    case 'neonoid': drawNeonoid(char); break;
+    case 'voidling': drawVoidling(char); break;
   }
 
   // HP bar
   const barWidth = char.radius * 2;
-  const barHeight = 5;
+  const barHeight = 6;
   const barX = char.x - barWidth / 2;
   const barY = char.y - char.radius - 25;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(barX, barY, barWidth, barHeight);
-  ctx.fillStyle = char.hp > 50 ? '#00ff00' : char.hp > 25 ? '#ffff00' : '#ff0000';
-  ctx.fillRect(barX, barY, (char.hp / 100) * barWidth, barHeight);
 
-  // HP outline
+  const hpPercent = char.hp / char.maxHp;
+  ctx.fillStyle = hpPercent > 0.5 ? '#00ff00' : hpPercent > 0.25 ? '#ffff00' : '#ff0000';
+  ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1;
   ctx.strokeRect(barX, barY, barWidth, barHeight);
 }
 
-// Physics
-function updatePhysics() {
-  characters.forEach(char => {
-    char.vy += GRAVITY;
-    char.x += char.vx;
-    char.y += char.vy;
+function drawProjectile(proj: Projectile) {
+  ctx.save();
+  ctx.translate(proj.x, proj.y);
 
-    if (char.y + char.radius > GROUND_Y) {
-      char.y = GROUND_Y - char.radius;
-      char.vy = -char.vy * 0.5;
-      char.vx *= 0.8;
+  ctx.fillStyle = proj.weapon.color;
+  ctx.shadowColor = proj.weapon.color;
+  ctx.shadowBlur = 15;
 
-      if (Math.abs(char.vy) < 0.5) {
-        char.vy = 0;
-      }
+  // Different shapes based on weapon effect
+  if (proj.weapon.effect === 'pierce' || proj.weapon.effect === 'electric') {
+    // Line/beam
+    const angle = Math.atan2(proj.vy, proj.vx);
+    ctx.rotate(angle);
+    ctx.fillRect(-proj.weapon.size * 2, -proj.weapon.size / 2, proj.weapon.size * 3, proj.weapon.size);
+  } else if (proj.weapon.effect === 'wave') {
+    // Wave pattern
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const x = Math.cos(angle) * proj.weapon.size;
+      const y = Math.sin(angle) * proj.weapon.size;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    // Regular circle
+    ctx.beginPath();
+    ctx.arc(0, 0, proj.weapon.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-    if (char.x - char.radius < 0) {
-      char.x = char.radius;
-      char.vx = -char.vx * 0.5;
-    }
-    if (char.x + char.radius > canvas.width) {
-      char.x = canvas.width - char.radius;
-      char.vx = -char.vx * 0.5;
-    }
-  });
+  ctx.shadowBlur = 0;
+  ctx.restore();
 }
 
-// Input Handler
+function drawAimLine() {
+  if (!aimingMode || !selectedWeapon) return;
+
+  const activeChar = characters.find(c => c.active && c.team === 0);
+  if (!activeChar) return;
+
+  const dx = mouseX - activeChar.x;
+  const dy = mouseY - activeChar.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  ctx.strokeStyle = selectedWeapon.color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 5]);
+  ctx.beginPath();
+  ctx.moveTo(activeChar.x, activeChar.y);
+  ctx.lineTo(mouseX, mouseY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Crosshair
+  ctx.strokeStyle = selectedWeapon.color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(mouseX - 10, mouseY);
+  ctx.lineTo(mouseX + 10, mouseY);
+  ctx.moveTo(mouseX, mouseY - 10);
+  ctx.lineTo(mouseX, mouseY + 10);
+  ctx.stroke();
+}
+
+// Physics & Game Logic
+function updateProjectiles() {
+  projectiles.forEach(proj => {
+    if (!proj.active) return;
+
+    proj.vy += GRAVITY;
+    proj.x += proj.vx;
+    proj.y += proj.vy;
+
+    // Check ground collision
+    if (proj.y > GROUND_Y) {
+      proj.active = false;
+    }
+
+    // Check character collision
+    characters.forEach(char => {
+      if (char.team === proj.team) return;
+
+      const dx = char.x - proj.x;
+      const dy = char.y - proj.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < char.radius + proj.weapon.size) {
+        // Hit!
+        const luck = 0.8 + Math.random() * 0.4; // 80-120% damage (luck factor)
+        const damage = Math.round(proj.weapon.damage * luck);
+        char.hp = Math.max(0, char.hp - damage);
+        char.expression = 'hurt';
+        proj.active = false;
+
+        setTimeout(() => {
+          if (char.hp > 0) char.expression = 'happy';
+        }, 500);
+
+        checkGameOver();
+      }
+    });
+
+    // Remove off-screen projectiles
+    if (proj.x < 0 || proj.x > canvas.width || proj.y < 0) {
+      proj.active = false;
+    }
+  });
+
+  projectiles = projectiles.filter(p => p.active);
+}
+
+function checkGameOver() {
+  const team0Alive = characters.filter(c => c.team === 0 && c.hp > 0).length;
+  const team1Alive = characters.filter(c => c.team === 1 && c.hp > 0).length;
+
+  if (team0Alive === 0) {
+    endGame(false);
+  } else if (team1Alive === 0) {
+    endGame(true);
+  }
+}
+
+function endGame(playerWon: boolean) {
+  gameStarted = false;
+  canvas.style.display = 'none';
+  weaponSelect.style.display = 'none';
+  gameInfo.style.display = 'none';
+  gameOver.style.display = 'flex';
+  gameOver.style.flexDirection = 'column';
+  gameOver.style.alignItems = 'center';
+
+  if (playerWon) {
+    gameOverText.textContent = '🎉 Victory! You defeated the enemy team!';
+    gameOverText.style.color = '#00aa00';
+  } else {
+    gameOverText.textContent = '💀 Defeat! Your team was destroyed!';
+    gameOverText.style.color = '#aa0000';
+  }
+}
+
+function nextTurn() {
+  const activeChar = characters.find(c => c.active);
+  if (activeChar) {
+    activeChar.active = false;
+    activeChar.expression = 'happy';
+  }
+
+  currentTeam = (currentTeam + 1) % 2;
+
+  // Find next alive character
+  const teamChars = characters.filter(c => c.team === currentTeam && c.hp > 0);
+  if (teamChars.length > 0) {
+    teamChars[0].active = true;
+    updateTurnInfo();
+    showWeaponSelect();
+    selectedWeapon = null;
+    aimingMode = false;
+  }
+}
+
+// Player Attack
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+});
+
 canvas.addEventListener('click', (e) => {
-  if (!gameStarted) return;
+  if (!gameStarted || !aimingMode || !selectedWeapon) return;
+
+  const activeChar = characters.find(c => c.active && c.team === 0);
+  if (!activeChar) return;
 
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
 
-  const activeChar = characters.find(c => c.active);
-  if (!activeChar || activeChar.team !== 0) return; // Only allow player moves
-
   const dx = clickX - activeChar.x;
   const dy = clickY - activeChar.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
 
-  activeChar.vx = dx * LAUNCH_POWER;
-  activeChar.vy = dy * LAUNCH_POWER;
+  const speed = selectedWeapon.speed;
+  const vx = (dx / dist) * speed;
+  const vy = (dy / dist) * speed;
+
+  projectiles.push({
+    x: activeChar.x,
+    y: activeChar.y,
+    vx, vy,
+    weapon: selectedWeapon,
+    team: 0,
+    active: true
+  });
+
   activeChar.expression = 'focused';
+  aimingMode = false;
+  weaponSelect.style.display = 'none';
 
-  setTimeout(() => {
-    activeChar.active = false;
-    activeChar.expression = 'happy';
-    currentTeam = 1;
-
-    const teamChars = characters.filter(c => c.team === currentTeam && c.hp > 0);
-    if (teamChars.length > 0) {
-      teamChars[0].active = true;
-      updateTurnInfo();
-
-      // AI move after short delay
-      setTimeout(aiMove, 1000);
-    }
-  }, 2000);
+  setTimeout(nextTurn, 1500);
 });
 
-// Simple AI
-function aiMove() {
-  const activeChar = characters.find(c => c.active);
-  if (!activeChar || activeChar.team !== 1) return;
+// AI Attack
+function aiAttack(weapon: Weapon) {
+  const activeChar = characters.find(c => c.active && c.team === 1);
+  if (!activeChar) return;
 
-  const playerChars = characters.filter(c => c.team === 0);
+  const playerChars = characters.filter(c => c.team === 0 && c.hp > 0);
+  if (playerChars.length === 0) return;
+
   const target = playerChars[Math.floor(Math.random() * playerChars.length)];
 
-  const dx = target.x - activeChar.x + (Math.random() - 0.5) * 100;
-  const dy = target.y - activeChar.y - 50;
+  const dx = target.x - activeChar.x + (Math.random() - 0.5) * 100; // Some inaccuracy
+  const dy = target.y - activeChar.y + (Math.random() - 0.5) * 50;
+  const dist = Math.sqrt(dx * dx + dy * dy);
 
-  activeChar.vx = dx * LAUNCH_POWER * 0.8;
-  activeChar.vy = dy * LAUNCH_POWER * 0.8;
+  const speed = weapon.speed;
+  const vx = (dx / dist) * speed;
+  const vy = (dy / dist) * speed;
+
+  projectiles.push({
+    x: activeChar.x,
+    y: activeChar.y,
+    vx, vy,
+    weapon: weapon,
+    team: 1,
+    active: true
+  });
+
   activeChar.expression = 'angry';
 
-  setTimeout(() => {
-    activeChar.active = false;
-    activeChar.expression = 'happy';
-    currentTeam = 0;
-
-    const teamChars = characters.filter(c => c.team === currentTeam && c.hp > 0);
-    if (teamChars.length > 0) {
-      teamChars[0].active = true;
-      updateTurnInfo();
-    }
-  }, 2000);
+  setTimeout(nextTurn, 1500);
 }
 
 // Game Loop
 function update() {
   if (!gameStarted) return;
-  updatePhysics();
+  updateProjectiles();
 }
 
 function render() {
@@ -674,6 +951,8 @@ function render() {
   drawPlants();
   if (gameStarted) {
     characters.forEach(drawCharacter);
+    projectiles.forEach(drawProjectile);
+    drawAimLine();
   }
 }
 
@@ -691,21 +970,27 @@ document.getElementById('selectVoidling')!.addEventListener('click', () => start
 function startGame(playerType: CharacterType) {
   playerTeamType = playerType;
 
-  // Choose random enemy type
   const types: CharacterType[] = ['plasmid', 'neonoid', 'voidling'];
   const remaining = types.filter(t => t !== playerType);
   enemyTeamType = remaining[Math.floor(Math.random() * remaining.length)];
 
-  // Hide selection, show game
   teamSelect.style.display = 'none';
   canvas.style.display = 'block';
   gameInfo.style.display = 'block';
+  gameOver.style.display = 'none';
 
   gameStarted = true;
   initGame(playerTeamType, enemyTeamType);
 }
 
-// Start rendering
+// Play Again
+playAgain.addEventListener('click', () => {
+  gameOver.style.display = 'none';
+  teamSelect.style.display = 'block';
+  initEnvironment();
+});
+
+// Start
 initEnvironment();
 gameLoop();
 </script>
@@ -714,19 +999,44 @@ gameLoop();
   #gameCanvas {
     max-width: 100%;
     height: auto;
+    cursor: crosshair;
   }
 
-  .team-btn {
+  .team-btn, .weapon-btn {
     cursor: pointer;
     transform: scale(1);
-    transition: transform 0.2s;
+    transition: transform 0.2s, background-color 0.2s;
   }
 
-  .team-btn:hover {
+  .team-btn:hover, .weapon-btn:hover {
     transform: scale(1.05);
   }
 
-  .team-btn:active {
+  .team-btn:active, .weapon-btn:active {
     transform: scale(0.95);
+  }
+
+  #weaponSelect {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  #playAgain {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  #playAgain:hover {
+    transform: scale(1.05);
   }
 </style>
