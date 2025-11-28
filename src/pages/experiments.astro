@@ -1,0 +1,38 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ProjectCard from "../components/ProjectCard.astro";
+
+const experiments = [
+  {
+    title: "Blackjack Saloon",
+    description:
+      "A lean browser blackjack game with a western saloon theme. Built to explore simple game loops and UI polish.",
+    tags: ["Game", "Browser", "JS"],
+    demoUrl: "/experiments/blackjack", // create this page or host a static build
+    codeUrl: "https://github.com/YOUR_GITHUB/blackjack-saloon",
+    kind: "experiment" as const,
+  },
+  {
+    title: "Slider Sandbox",
+    description:
+      "Tiny interactive sandbox to tweak parameters (like learning rate, noise, etc.) and see visual changes in real time.",
+    tags: ["UI", "Sliders", "Playground"],
+    demoUrl: "/experiments/slider-sandbox",
+    codeUrl: "#",
+    kind: "experiment" as const,
+  },
+];
+---
+<BaseLayout title="Experiments – Kaden Godinez">
+  <section class="space-y-4">
+    <h1 class="text-xl md:text-2xl font-semibold text-[#2A3D56]">Experiments</h1>
+    <p class="text-sm md:text-base text-[#4B5563] max-w-2xl">
+      Small, focused toys and interactive sketches. These are where I try ideas without worrying if they're "portfolio-ready."
+    </p>
+    <div class="grid gap-4 md:grid-cols-2">
+      {experiments.map((exp) => (
+        <ProjectCard {...exp} />
+      ))}
+    </div>
+  </section>
+</BaseLayout>

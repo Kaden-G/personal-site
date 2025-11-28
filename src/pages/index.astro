@@ -1,0 +1,51 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Hero from "../components/Hero.astro";
+import ProjectCard from "../components/ProjectCard.astro";
+
+const featuredProjects = [
+  {
+    title: "Quokka – On-prem Knowledge Assistant",
+    description:
+      "A lightweight, offline-friendly RAG tool that helps teams query SOPs and docs in secure environments.",
+    tags: ["RAG", "Ollama", "On-prem", "SOP search"],
+    demoUrl: "#", // later: /experiments/quokka-demo or external link
+    codeUrl: "https://github.com/YOUR_GITHUB/quokka",
+  },
+  {
+    title: "SmallAI – Log Query Rewriter",
+    description:
+      "Transforms noisy, human log search requests into structured queries for faster troubleshooting.",
+    tags: ["AI assist", "Infra", "Observability"],
+    demoUrl: "#",
+    codeUrl: "https://github.com/YOUR_GITHUB/small-ai",
+  },
+  {
+    title: "Blackjack Saloon – Browser Game",
+    description:
+      "A small western-themed blackjack game built just for fun and UI experimentation.",
+    tags: ["Game", "JS", "UI"],
+    demoUrl: "/experiments/blackjack", // or external demo
+    codeUrl: "https://github.com/YOUR_GITHUB/blackjack-saloon",
+  },
+];
+---
+<BaseLayout title="Kaden Godinez – Interactive Portfolio">
+  <Hero />
+
+  <section class="space-y-4 mt-4">
+    <header class="flex items-center justify-between">
+      <h2 class="text-sm md:text-base font-semibold text-[#2A3D56]">
+        Featured work
+      </h2>
+      <a href="/projects" class="text-xs text-[#2A3D56] underline">
+        View all projects
+      </a>
+    </header>
+    <div class="grid gap-4 md:grid-cols-2">
+      {featuredProjects.map((p) => (
+        <ProjectCard {...p} />
+      ))}
+    </div>
+  </section>
+</BaseLayout>

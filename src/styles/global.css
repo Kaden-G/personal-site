@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --mc-cream: #f4efe7;
+  --mc-seafoam: #91c4b4;
+  --mc-burnt: #cf6a32;
+  --mc-navy: #2a3d56;
+  --mc-walnut: #755c48;
+  --mc-sage: #a8b9a5;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  background: var(--mc-cream);
+  color: #1f2933;
+}
+
+a {
+  text-decoration: none;
+}
+
+.card-shadow {
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.08),
+    0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.roundy {
+  border-radius: 1.5rem;
+}
+
+.tag-pill {
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.7);
+}

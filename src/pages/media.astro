@@ -1,0 +1,70 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const videos = [
+  {
+    title: "Quokka walkthrough",
+    description: "Short video showing how Quokka answers SOP questions.",
+    src: "/media/quokka-demo.mp4", // put file in public/media
+  },
+];
+
+const slides = [
+  {
+    title: "AI-adjacent Infra Portfolio Deck",
+    description: "Slide deck overview of my projects and approach.",
+    href: "/media/portfolio-slides.pdf",
+  },
+];
+
+const images = [
+  {
+    title: "Blackjack Saloon UI",
+    src: "/media/blackjack-ui.png",
+  },
+];
+---
+<BaseLayout title="Media – Kaden Godinez">
+  <section class="space-y-6">
+    <h1 class="text-xl md:text-2xl font-semibold text-[#2A3D56]">Media</h1>
+
+    <section class="space-y-3">
+      <h2 class="text-sm md:text-base font-semibold text-[#2A3D56]">Videos</h2>
+      <div class="grid gap-4 md:grid-cols-2">
+        {videos.map((v) => (
+          <div class="roundy card-shadow bg-white/80 p-4 space-y-2">
+            <h3 class="text-sm font-semibold">{v.title}</h3>
+            <p class="text-xs text-[#4B5563]">{v.description}</p>
+            <video controls class="w-full roundy" src={v.src}></video>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm md:text-base font-semibold text-[#2A3D56]">Slides</h2>
+      <ul class="space-y-2 text-sm">
+        {slides.map((s) => (
+          <li>
+            <a href={s.href} class="underline text-[#2A3D56]" target="_blank" rel="noreferrer">
+              {s.title}
+            </a>
+            <span class="text-xs text-[#6B7280]"> – {s.description}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm md:text-base font-semibold text-[#2A3D56]">Images</h2>
+      <div class="grid gap-4 md:grid-cols-3">
+        {images.map((img) => (
+          <figure class="space-y-1">
+            <img src={img.src} alt={img.title} class="w-full roundy card-shadow" />
+            <figcaption class="text-xs text-[#4B5563]">{img.title}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  </section>
+</BaseLayout>

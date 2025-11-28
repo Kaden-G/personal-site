@@ -1,0 +1,54 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  tags?: string[];
+  demoUrl?: string;
+  codeUrl?: string;
+  kind?: "project" | "experiment";
+}
+
+const { title, description, tags = [], demoUrl, codeUrl, kind = "project" } = Astro.props;
+---
+<article class="roundy card-shadow bg-white/80 px-5 py-4 flex flex-col gap-3">
+  <header class="flex items-start justify-between gap-3">
+    <div>
+      <h2 class="font-semibold text-sm md:text-base text-[#2A3D56]">{title}</h2>
+      {kind === "experiment" && (
+        <p class="text-[0.7rem] uppercase tracking-[0.2em] text-[#6B7280]">experiment</p>
+      )}
+    </div>
+  </header>
+  <p class="text-xs md:text-sm text-[#374151]">
+    {description}
+  </p>
+  {tags.length > 0 && (
+    <div class="flex flex-wrap gap-2 text-[0.7rem]">
+      {tags.map((tag) => (
+        <span class="tag-pill">{tag}</span>
+      ))}
+    </div>
+  )}
+  <div class="flex gap-3 pt-1">
+    {demoUrl && (
+      <a
+        href={demoUrl}
+        class="inline-flex items-center justify-center px-3 py-1.5 roundy text-xs font-medium bg-[#CF6A32] text-[#F4EFE7] hover:bg-[#b95424] transition"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Launch demo
+      </a>
+    )}
+    {codeUrl && (
+      <a
+        href={codeUrl}
+        class="inline-flex items-center justify-center px-3 py-1.5 roundy text-xs font-medium border border-[#2A3D56]/30 text-[#2A3D56] hover:bg-white"
+        target="_blank"
+        rel="noreferrer"
+      >
+        View code
+      </a>
+    )}
+  </div>
+</article>

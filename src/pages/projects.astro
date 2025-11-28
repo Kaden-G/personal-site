@@ -1,0 +1,52 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ProjectCard from "../components/ProjectCard.astro";
+
+const projects = [
+  {
+    title: "Quokka – On-prem Knowledge Assistant",
+    description:
+      "Simple, tough little on-prem RAG pipeline that turns English questions into grounded SOP answers using Ollama and a local vector store.",
+    tags: ["RAG", "Ollama", "Chroma/Qdrant", "On-prem"],
+    demoUrl: "#",
+    codeUrl: "https://github.com/YOUR_GITHUB/quokka",
+  },
+  {
+    title: "SmallAI – Log Query Rewriter",
+    description:
+      "Hybrid rules + embeddings to clean up human log/alert queries and make search tools behave like they understand English.",
+    tags: ["AI", "Infra", "Tooling"],
+    demoUrl: "#",
+    codeUrl: "https://github.com/YOUR_GITHUB/small-ai",
+  },
+  {
+    title: "League of Legends Coaching Pipeline",
+    description:
+      "Data pipeline that ingests Riot match data, engineers features, and produces simple coaching insights per role.",
+    tags: ["Data engineering", "Analytics", "Games"],
+    demoUrl: "#",
+    codeUrl: "https://github.com/YOUR_GITHUB/lol-pipeline",
+  },
+  {
+    title: "Blackjack Saloon",
+    description:
+      "Western-saloon themed blackjack game. Focused on clean state management and playful UI touches.",
+    tags: ["Game", "JS", "Frontend"],
+    demoUrl: "/experiments/blackjack",
+    codeUrl: "https://github.com/YOUR_GITHUB/blackjack-saloon",
+  },
+];
+---
+<BaseLayout title="Projects – Kaden Godinez">
+  <section class="space-y-4">
+    <h1 class="text-xl md:text-2xl font-semibold text-[#2A3D56]">Projects</h1>
+    <p class="text-sm md:text-base text-[#4B5563] max-w-2xl">
+      A mix of AI-adjacent tools, data pipelines, and small web experiences that balance practicality and play.
+    </p>
+    <div class="grid gap-4 md:grid-cols-2">
+      {projects.map((p) => (
+        <ProjectCard {...p} />
+      ))}
+    </div>
+  </section>
+</BaseLayout>
