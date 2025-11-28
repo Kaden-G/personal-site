@@ -165,6 +165,8 @@ let enemyTeamType: CharacterType;
 let gameStarted = false;
 let selectedWeapon: Weapon | null = null;
 let aimingMode = false;
+let movementMode = false;
+let hasMoved = false;
 let mouseX = 0;
 let mouseY = 0;
 
@@ -228,7 +230,37 @@ function initGame(playerType: CharacterType, enemyType: CharacterType) {
 
   characters[0].active = true;
   updateTurnInfo();
-  showWeaponSelect();
+  startMovementPhase();
+}
+
+// Start movement phase
+function startMovementPhase() {
+  const activeChar = characters.find(c => c.active);
+  if (!activeChar) return;
+
+  if (activeChar.team === 0) {
+    movementMode = true;
+    hasMoved = false;
+    weaponSelect.style.display = 'none';
+    instructions.textContent = 'Click to move your character, then press SPACE to continue';
+  } else {
+    // AI movement
+    aiMove();
+  }
+}
+
+function aiMove() {
+  const activeChar = characters.find(c => c.active && c.team === 1);
+  if (!activeChar) return;
+
+  // AI moves randomly
+  const moveX = (Math.random() - 0.5) * 60;
+  activeChar.vx = moveX * 0.3;
+  activeChar.vy = -3;
+
+  setTimeout(() => {
+    showWeaponSelect();
+  }, 1000);
 }
 
 // Update turn information
@@ -754,15 +786,15 @@ function drawAimLine() {
   const power = Math.min(dist / maxDist, 1.5);
   const powerPercent = Math.min(power * 100, 150);
 
-  // Calculate initial velocity
-  const powerMultiplier = 0.15;
+  // Calculate initial velocity (SLOWER for better visibility)
+  const powerMultiplier = 0.08;
   const vx = dx * powerMultiplier;
   const vy = dy * powerMultiplier;
 
-  // Draw trajectory arc
-  ctx.strokeStyle = selectedWeapon.color + '80';
+  // Draw trajectory arc (only one line - no double lines!)
+  ctx.strokeStyle = selectedWeapon.color;
   ctx.lineWidth = 3;
-  ctx.setLineDash([5, 5]);
+  ctx.setLineDash([8, 4]);
   ctx.beginPath();
   ctx.moveTo(activeChar.x, activeChar.y);
 
@@ -772,7 +804,7 @@ function drawAimLine() {
   let simVx = vx;
   let simVy = vy;
 
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 150; i++) {
     simVy += GRAVITY;
     simX += simVx;
     simY += simVy;
@@ -784,16 +816,6 @@ function drawAimLine() {
       break;
     }
   }
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Draw aim line from character to mouse
-  ctx.strokeStyle = selectedWeapon.color;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([10, 5]);
-  ctx.beginPath();
-  ctx.moveTo(activeChar.x, activeChar.y);
-  ctx.lineTo(mouseX, mouseY);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -834,6 +856,38 @@ function drawAimLine() {
 }
 
 // Physics & Game Logic
+function updateCharacterPhysics() {
+  characters.forEach(char => {
+    // Apply gravity
+    char.vy += GRAVITY;
+
+    // Update position
+    char.x += char.vx;
+    char.y += char.vy;
+
+    // Ground collision
+    if (char.y + char.radius > GROUND_Y) {
+      char.y = GROUND_Y - char.radius;
+      char.vy = 0;
+      char.vx *= 0.85; // Friction
+
+      if (Math.abs(char.vx) < 0.1) {
+        char.vx = 0;
+      }
+    }
+
+    // Wall collision
+    if (char.x - char.radius < 0) {
+      char.x = char.radius;
+      char.vx = 0;
+    }
+    if (char.x + char.radius > canvas.width) {
+      char.x = canvas.width - char.radius;
+      char.vx = 0;
+    }
+  });
+}
+
 function updateProjectiles() {
   projectiles.forEach(proj => {
     if (!proj.active) return;
@@ -923,9 +977,39 @@ function nextTurn() {
   if (teamChars.length > 0) {
     teamChars[0].active = true;
     updateTurnInfo();
-    showWeaponSelect();
     selectedWeapon = null;
     aimingMode = false;
+    movementMode = false;
+    hasMoved = false;
+    startMovementPhase();
+  }
+}
+
+function drawMovementIndicator() {
+  if (!movementMode) return;
+
+  const activeChar = characters.find(c => c.active && c.team === 0);
+  if (!activeChar) return;
+
+  // Draw movement range circle
+  ctx.strokeStyle = hasMoved ? '#888888' : '#ffff00';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.arc(activeChar.x, activeChar.y, 100, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Crosshair at mouse
+  if (!hasMoved) {
+    ctx.strokeStyle = '#ffff00';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(mouseX - 10, mouseY);
+    ctx.lineTo(mouseX + 10, mouseY);
+    ctx.moveTo(mouseX, mouseY - 10);
+    ctx.lineTo(mouseX, mouseY + 10);
+    ctx.stroke();
   }
 }
 
@@ -937,37 +1021,64 @@ canvas.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('click', (e) => {
-  if (!gameStarted || !aimingMode || !selectedWeapon) return;
-
-  const activeChar = characters.find(c => c.active && c.team === 0);
-  if (!activeChar) return;
+  if (!gameStarted) return;
 
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
 
-  const dx = clickX - activeChar.x;
-  const dy = clickY - activeChar.y;
+  const activeChar = characters.find(c => c.active && c.team === 0);
+  if (!activeChar) return;
 
-  // Power based on distance from character to click point
-  const powerMultiplier = 0.15;
-  const vx = dx * powerMultiplier;
-  const vy = dy * powerMultiplier;
+  // Movement mode - click to jump toward location
+  if (movementMode && !hasMoved) {
+    const dx = clickX - activeChar.x;
+    const dy = clickY - activeChar.y;
 
-  projectiles.push({
-    x: activeChar.x,
-    y: activeChar.y,
-    vx, vy,
-    weapon: selectedWeapon,
-    team: 0,
-    active: true
-  });
+    // Apply jump force
+    const jumpMultiplier = 0.08;
+    activeChar.vx = dx * jumpMultiplier;
+    activeChar.vy = dy * jumpMultiplier - 2; // Add upward boost
 
-  activeChar.expression = 'focused';
-  aimingMode = false;
-  weaponSelect.style.display = 'none';
+    hasMoved = true;
+    instructions.textContent = 'Press SPACE to continue to weapon selection';
+    return;
+  }
 
-  setTimeout(nextTurn, 1500);
+  // Aiming mode - click to fire
+  if (aimingMode && selectedWeapon) {
+    const dx = clickX - activeChar.x;
+    const dy = clickY - activeChar.y;
+
+    // Power based on distance (SLOWER for visibility)
+    const powerMultiplier = 0.08;
+    const vx = dx * powerMultiplier;
+    const vy = dy * powerMultiplier;
+
+    projectiles.push({
+      x: activeChar.x,
+      y: activeChar.y,
+      vx, vy,
+      weapon: selectedWeapon,
+      team: 0,
+      active: true
+    });
+
+    activeChar.expression = 'focused';
+    aimingMode = false;
+    weaponSelect.style.display = 'none';
+
+    setTimeout(nextTurn, 1500);
+  }
+});
+
+// Spacebar to end movement phase
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && movementMode && hasMoved) {
+    e.preventDefault();
+    movementMode = false;
+    showWeaponSelect();
+  }
 });
 
 // AI Attack
@@ -984,8 +1095,8 @@ function aiAttack(weapon: Weapon) {
   const dx = target.x - activeChar.x + (Math.random() - 0.5) * 80;
   const dy = target.y - activeChar.y + (Math.random() - 0.5) * 60;
 
-  // Power based on distance (same as player)
-  const powerMultiplier = 0.15;
+  // Power based on distance (SLOWER like player)
+  const powerMultiplier = 0.08;
   const vx = dx * powerMultiplier;
   const vy = dy * powerMultiplier;
 
@@ -1006,6 +1117,7 @@ function aiAttack(weapon: Weapon) {
 // Game Loop
 function update() {
   if (!gameStarted) return;
+  updateCharacterPhysics();
   updateProjectiles();
 }
 
@@ -1017,6 +1129,7 @@ function render() {
   if (gameStarted) {
     characters.forEach(drawCharacter);
     projectiles.forEach(drawProjectile);
+    drawMovementIndicator();
     drawAimLine();
   }
 }
